@@ -370,59 +370,56 @@ void RPlidarNode::spin()
 }
 
 void RPlidarNode::publish_scan(
-  rplidar_response_measurement_node_hq_t * nodes,
-  size_t node_count, rclcpp::Time & start, double scan_time,
-  float angle_min, float angle_max)
+    rplidar_response_measurement_node_hq_t *nodes,
+    size_t node_count, rclcpp::Time &start, double scan_time,
+    float angle_min, float angle_max)
 {
-  static int scan_count = 0;
-  sensor_msgs::msg::LaserScan scan_msg;
+    static int scan_count = 0;
+    sensor_msgs::msg::LaserScan scan_msg;
 
-  scan_msg.header.stamp = start;
-  scan_msg.header.frame_id = frame_id_;
-  scan_count++;
+    scan_msg.header.stamp = start;
+    scan_msg.header.frame_id = frame_id_;
+    scan_count++;
 
-  bool reversed = (angle_max > angle_min);
-  if (reversed) {
-    scan_msg.angle_min = M_PI - angle_max;
-    scan_msg.angle_max = M_PI - angle_min;
-  } else {
-    scan_msg.angle_min = M_PI - angle_min;
-    scan_msg.angle_max = M_PI - angle_max;
-  }
-  scan_msg.angle_increment =
-    (scan_msg.angle_max - scan_msg.angle_min) / (double)(node_count - 1);
-
-  scan_msg.scan_time = scan_time;
-  scan_msg.time_increment = scan_time / (double)(node_count - 1);
-  scan_msg.range_min = 0.15;
-  scan_msg.range_max = max_distance_;
-
-  scan_msg.intensities.resize(node_count);
-  scan_msg.ranges.resize(node_count);
-  bool reverse_data = (!inverted_ && reversed) || (inverted_ && !reversed);
-  if (!reverse_data) {
-    for (size_t i = 0; i < node_count; i++) {
-      float read_value = (float) nodes[i].dist_mm_q2 / 4.0f / 1000;
-      if (read_value == 0.0) {
-        scan_msg.ranges[i] = std::numeric_limits<float>::infinity();
-      } else {
-        scan_msg.ranges[i] = read_value;
-      }
-      scan_msg.intensities[i] = (float) (nodes[i].quality >> 2);
+    bool reversed = (angle_max > angle_min);
+    if (reversed)
+    {
+        scan_msg.angle_min = -angle_max;
+        scan_msg.angle_max = -angle_min;
     }
-  } else {
-    for (size_t i = 0; i < node_count; i++) {
-      float read_value = (float)nodes[i].dist_mm_q2 / 4.0f / 1000;
-      if (read_value == 0.0) {
-        scan_msg.ranges[node_count - 1 - i] = std::numeric_limits<float>::infinity();
-      } else {
-        scan_msg.ranges[node_count - 1 - i] = read_value;
-      }
-      scan_msg.intensities[node_count - 1 - i] = (float) (nodes[i].quality >> 2);
+    else
+    {
+        scan_msg.angle_min = -angle_max;
+        scan_msg.angle_max = -angle_min;
     }
-  }
+    scan_msg.angle_increment =
+        (scan_msg.angle_max - scan_msg.angle_min) / (double)(node_count - 1);
 
-  scan_publisher_->publish(scan_msg);
+    scan_msg.scan_time = scan_time;
+    scan_msg.time_increment = scan_time / (double)(node_count - 1);
+    scan_msg.range_min = 0.15;
+    scan_msg.range_max = max_distance_;
+
+    scan_msg.intensities.resize(node_count);
+    scan_msg.ranges.resize(node_count);
+    
+    for (size_t i = 0; i < node_count; i++)
+    {
+        float read_value = (float)nodes[i].dist_mm_q2 / 4.0f / 1000;
+        size_t rotated_index = node_count - 1 - i;
+        
+        if (read_value == 0.0)
+        {
+            scan_msg.ranges[rotated_index] = std::numeric_limits<float>::infinity();
+        }
+        else
+        {
+            scan_msg.ranges[rotated_index] = read_value;
+        }
+        scan_msg.intensities[rotated_index] = (float)(nodes[i].quality >> 2);
+    }
+
+    scan_publisher_->publish(scan_msg);
 }
 
 }  // namespace rplidar_ros

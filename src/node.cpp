@@ -47,61 +47,83 @@ using namespace rp::standalone::rplidar;
 
 RPlidarDriver * drv = NULL;
 
-void publish_scan(ros::Publisher *pub,
-                  rplidar_response_measurement_node_hq_t *nodes,
-                  size_t node_count, ros::Time start,
-                  double scan_time, bool inverted,
-                  float angle_min, float angle_max,
-                  float max_distance,
-                  std::string frame_id)
+void publish_scan(
+    rplidar_response_measurement_node_hq_t *nodes,
+    size_t node_count, rclcpp::Time &start, double scan_time,
+    float angle_min, float angle_max)
 {
     static int scan_count = 0;
-    sensor_msgs::LaserScan scan_msg;
+    sensor_msgs::msg::LaserScan scan_msg;
 
     scan_msg.header.stamp = start;
-    scan_msg.header.frame_id = frame_id;
+    scan_msg.header.frame_id = frame_id_;
     scan_count++;
 
     bool reversed = (angle_max > angle_min);
-    if ( reversed ) {
-      scan_msg.angle_min =  M_PI - angle_max;
-      scan_msg.angle_max =  M_PI - angle_min;
-    } else {
-      scan_msg.angle_min =  M_PI - angle_min;
-      scan_msg.angle_max =  M_PI - angle_max;
+    if (reversed)
+    {
+        // 180度回転のため、角度の範囲を反転
+        scan_msg.angle_min = -angle_max;
+        scan_msg.angle_max = -angle_min;
+    }
+    else
+    {
+        // 180度回転のため、角度の範囲を反転
+        scan_msg.angle_min = -angle_min;
+        scan_msg.angle_max = -angle_max;
     }
     scan_msg.angle_increment =
-        (scan_msg.angle_max - scan_msg.angle_min) / (double)(node_count-1);
+        (scan_msg.angle_max - scan_msg.angle_min) / (double)(node_count - 1);
 
     scan_msg.scan_time = scan_time;
-    scan_msg.time_increment = scan_time / (double)(node_count-1);
+    scan_msg.time_increment = scan_time / (double)(node_count - 1);
     scan_msg.range_min = 0.15;
-    scan_msg.range_max = max_distance;//8.0;
+    scan_msg.range_max = max_distance_;
 
     scan_msg.intensities.resize(node_count);
     scan_msg.ranges.resize(node_count);
-    bool reverse_data = (!inverted && reversed) || (inverted && !reversed);
-    if (!reverse_data) {
-        for (size_t i = 0; i < node_count; i++) {
-            float read_value = (float) nodes[i].dist_mm_q2/4.0f/1000;
+    bool reverse_data = (!inverted_ && reversed) || (inverted_ && !reversed);
+    
+    // データを180度回転させて格納
+    size_t half_count = node_count / 2;
+    if (!reverse_data)
+    {
+        for (size_t i = 0; i < node_count; i++)
+        {
+            float read_value = (float)nodes[i].dist_mm_q2 / 4.0f / 1000;
+            size_t rotated_index = (i + half_count) % node_count;
+            
             if (read_value == 0.0)
-                scan_msg.ranges[i] = std::numeric_limits<float>::infinity();
+            {
+                scan_msg.ranges[rotated_index] = std::numeric_limits<float>::infinity();
+            }
             else
-                scan_msg.ranges[i] = read_value;
-            scan_msg.intensities[i] = (float) (nodes[i].quality >> 2);
+            {
+                scan_msg.ranges[rotated_index] = read_value;
+            }
+            scan_msg.intensities[rotated_index] = (float)(nodes[i].quality >> 2);
         }
-    } else {
-        for (size_t i = 0; i < node_count; i++) {
-            float read_value = (float)nodes[i].dist_mm_q2/4.0f/1000;
+    }
+    else
+    {
+        for (size_t i = 0; i < node_count; i++)
+        {
+            float read_value = (float)nodes[i].dist_mm_q2 / 4.0f / 1000;
+            size_t rotated_index = (node_count - 1 - i + half_count) % node_count;
+            
             if (read_value == 0.0)
-                scan_msg.ranges[node_count-1-i] = std::numeric_limits<float>::infinity();
+            {
+                scan_msg.ranges[rotated_index] = std::numeric_limits<float>::infinity();
+            }
             else
-                scan_msg.ranges[node_count-1-i] = read_value;
-            scan_msg.intensities[node_count-1-i] = (float) (nodes[i].quality >> 2);
+            {
+                scan_msg.ranges[rotated_index] = read_value;
+            }
+            scan_msg.intensities[rotated_index] = (float)(nodes[i].quality >> 2);
         }
     }
 
-    pub->publish(scan_msg);
+    scan_publisher_->publish(scan_msg);
 }
 
 bool getRPLIDARDeviceInfo(RPlidarDriver * drv)

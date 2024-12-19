@@ -154,7 +154,7 @@ u_result SocketAddress::setAddressFromString(const char * address_string,  Socke
 u_result SocketAddress::getAddressAsString(char * buffer, size_t buffersize) const
 {
     int net_family = reinterpret_cast<const sockaddr_storage *>(_platform_data)->ss_family;
-    const char *ans = NULL;
+    const char *ans;
     switch (net_family) {
         case AF_INET:
             ans = inet_ntop(net_family, &reinterpret_cast<const sockaddr_in *>(_platform_data)->sin_addr,
@@ -167,7 +167,7 @@ u_result SocketAddress::getAddressAsString(char * buffer, size_t buffersize) con
 
         break;
     }
-    return ans<=0?RESULT_OPERATION_FAIL:RESULT_OK;
+    return (ans == nullptr) ? RESULT_OPERATION_FAIL : RESULT_OK;
 }
 
 
